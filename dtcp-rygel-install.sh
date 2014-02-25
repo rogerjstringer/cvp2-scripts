@@ -24,7 +24,12 @@ install_dtcp_lib()
 
     echo "*** Installing ${repo_base}..." 2>&1
     cd ${CVP2_GIT} || bailout "Couldn't cd to ${CVP2_GIT}"
-    git clone ${repo_url} | tee -a ${log_file} || bailout "Couldn't clone ${repo_base}"
+    if [ -d ${repo_base} ]; then
+	cd ${repo_base} || bailout "Couldn't cd to ${repo_base} directory"
+	git pull || bailout "Couldn't git pull to ${repo_base} directory"
+    else
+	git clone ${repo_url} | tee -a ${log_file} || bailout "Couldn't clone ${repo_base}"
+    fi
     cd ${repo_base} || bailout "Couldn't cd to ${repo_base} directory"
     git checkout ${repo_branch}
 

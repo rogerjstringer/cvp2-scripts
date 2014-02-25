@@ -7,6 +7,14 @@ default_build=~/cvp2
 
 default_branch=cablelabs/master
 
+if [ `uname -m` == 'x86_64' ]; then
+	echo Found 64 bit system
+	gmp_flags="--enable-cxx --build=x86_64-linux"
+else
+	echo Found 32 bit system
+	gmp_flags="ABI=32"
+fi
+
 prerequisite_packages=(
 "git"
 "g++"
@@ -39,7 +47,7 @@ external_packages=(
 "http://ftp.gnu.org/pub/gnu/libtool/libtool-2.4.2.tar.xz" ""
 "http://www.sqlite.org/2013/sqlite-autoconf-3071602.tar.gz" ""
 "http://xmlsoft.org/sources/libxml2-2.9.0.tar.gz" ""
-"http://ftp.gnu.org/gnu/gmp/gmp-5.1.1.tar.xz" "ABI=32"
+"http://ftp.gnu.org/gnu/gmp/gmp-5.1.1.tar.xz" "$gmp_flags"
 "http://www.lysator.liu.se/~nisse/archive/nettle-2.7.tar.gz" ""
 "ftp://ftp.gnutls.org/gcrypt/gnutls/v3.2/gnutls-3.2.0.tar.xz" ""
 "http://ftp.gnome.org/pub/GNOME/sources/gobject-introspection/1.36/gobject-introspection-1.36.0.tar.xz" ""
@@ -115,8 +123,8 @@ if [ -z $CVP2_ROOT ]; then
 	echo "Enter the desired installation directory [default: ${CVP2_BUILD}/root]:"
 	read destDir
 	if [ -n "$destDir" ]; then
-    	CVP2_ROOT="$destDir"
-   else
+		CVP2_ROOT="$destDir"
+	else
 		CVP2_ROOT="${CVP2_BUILD}/root"
 	fi
 fi
@@ -125,8 +133,8 @@ if [ -z $CVP2_GIT ]; then
 	echo "Enter the desired git directory [default: ${CVP2_BUILD}/git]:"
 	read destDir
 	if [ -n "$destDir" ]; then
-    	CVP2_GIT="$destDir"
-   else
+		CVP2_GIT="$destDir"
+	else
 		CVP2_GIT="${CVP2_BUILD}/git"
 	fi
 fi
@@ -147,6 +155,15 @@ echo "*** Install directory: ${CVP2_ROOT}" | tee -a ${log_file}
 if [ ! -d ${CVP2_ROOT} ]; then
     mkdir -p ${CVP2_ROOT} || bailout "Couldn't create ${CVP2_ROOT}"
 fi
+if [ `uname -m` == 'x86_64' ]; then
+    # if we don't do this on 64 bit systems, gnutls can't find libnettle or libhogweed
+    cd ${CVP2_ROOT}
+    mkdir -p lib
+    echo "create linked ${CVP2_ROOT}/lib64"
+    ln -sf lib lib64
+    cd ${CVP2_BUILD}
+fi
+
 
 if [ ! -d ${CVP2_BUILD}/packages ];then
     mkdir -p ${CVP2_BUILD}/packages || bailout "Couldn't create packages directory"
@@ -191,6 +208,11 @@ source ${env_file}
 
 # if this cache directory exists, it can cause problems
 rm -r -f  ~/.cache/g-ir-scanner
+
+# handle bug in pkg-config-0.28 when rebuilding it (fixed in next version)
+if [ -d ${CVP2_ROOT}/bin -a -e ${CVP2_ROOT}/bin/x86_64-unknown-linux-gnu-pkg-config ] ; then
+	unlink ${CVP2_ROOT}/bin/x86_64-unknown-linux-gnu-pkg-config
+fi
 
 process_package()
 {
@@ -238,8 +260,13 @@ process_repo()
 
 	echo "*** Installing ${repo_base}..." 2>&1 | tee -a ${log_file}
 	cd ${CVP2_GIT} || bailout "Couldn't cd to ${CVP2_GIT}"
-	git clone ${repo_url} | tee -a ${log_file} || bailout "Couldn't clone ${repo_base}"
-	cd ${repo_base} || bailout "Couldn't cd to ${repo_base} directory"
+	if [ -d ${repo_base} ]; then
+		cd ${repo_base} || bailout "Couldn't cd to ${repo_base} directory"
+		git pull || bailout "Couldn't git pull to ${repo_base} directory"
+	else
+		git clone ${repo_url} | tee -a ${log_file} || bailout "Couldn't clone ${repo_base}"
+		cd ${repo_base} || bailout "Couldn't cd to ${repo_base} directory"
+	fi
 	git checkout ${repo_branch}
 	
 	echo "*** Running autogen for ${repo_base}" | tee -a ${log_file}
@@ -280,3 +307,4 @@ chmod 775 ${CVP2_ROOT}/bin/dmr
 
 echo "NOTE: Environment variables for this prefix can be set via 'source ${env_file}'" | tee -a ${log_file}
 echo "Done." | tee -a ${log_file}
+
